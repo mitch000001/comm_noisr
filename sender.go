@@ -6,127 +6,101 @@ import (
 	"encoding/json"
 	"github.com/gorilla/mux"
 	"net/http"
-	"regexp"
 )
 
-var indexPath *regexp.Regexp = regexp.MustCompile("sender_types")
-
 type SenderType struct {
-	Key           string         `json:"key", datastore:"-"`
-	Name          string         `json:"name"`
-	SenderConfigs []SenderConfig `json:"sender_configs,omitempty"`
+	Key           string          `json:"key", datastore:"-"`
+	Name          string          `json:"name"`
+	Scope         string          `json:"scope"`
+	AuthURL       string          `json:"auth_url"`
+	TokenURL      string          `json:"token_url"`
+	RedirectURL   string          `json:"redirect_url"`
+	SenderClients []*SenderClient `json:"sender_clients,omitempty", datastore:"-"`
 }
 
 type SenderTypeController struct{}
 
 func (s *SenderTypeController) Index(response http.ResponseWriter, request *http.Request) {
-	context := appengine.NewContext(request)
-	query := datastore.NewQuery("SenderType")
-	var senderTypes []*SenderType
-	keys, err := query.GetAll(context, &senderTypes)
+	senderTypes, err := app.SenderTypeOrm.FindAll(request)
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if senderTypes == nil {
-		senderTypes = make([]*SenderType, 0)
-	}
-	for i, senderType := range senderTypes {
-		encodedKey := keys[i].Encode()
-		senderType.Key = encodedKey
+	for _, senderType := range senderTypes {
+		senderClients, err := app.SenderClientOrm.FindAllForSenderType(request, senderType.Key)
+		if err != nil {
+			http.Error(response, err.Error(), http.StatusBadRequest)
+			return
+		}
+		senderType.SenderClients = senderClients
 	}
 	encoder := json.NewEncoder(response)
 	encoder.Encode(senderTypes)
 }
 
 func (s *SenderTypeController) Create(response http.ResponseWriter, request *http.Request) {
-	context := appengine.NewContext(request)
 	senderType := new(SenderType)
 	decoder := json.NewDecoder(request.Body)
 	err := decoder.Decode(&senderType)
 	if err != nil {
-		context.Infof("Decoding failed for request %v", request)
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
-	incompleteKey := datastore.NewIncompleteKey(context, "SenderType", nil)
-	key, err := datastore.Put(context, incompleteKey, senderType)
+	senderType, err = app.SenderTypeOrm.Save(request, senderType)
 	if err != nil {
-		context.Infof("Insert failed for key '%v' and entity '%+v'", incompleteKey, senderType)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	senderType.Key = key.Encode()
 	encoder := json.NewEncoder(response)
 	encoder.Encode(senderType)
 }
 
 func (s *SenderTypeController) Show(response http.ResponseWriter, request *http.Request) {
-	context := appengine.NewContext(request)
 	encodedKey := mux.Vars(request)["key"]
-	key, err := datastore.DecodeKey(encodedKey)
-	if err != nil {
-		context.Infof("Key decoding failed for key %s", encodedKey)
-		http.NotFound(response, request)
-		return
-	}
-	senderType := new(SenderType)
-	err = datastore.Get(context, key, senderType)
+	senderType, err := app.SenderTypeOrm.Find(request, encodedKey)
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	response.WriteHeader(http.StatusCreated)
-	senderType.Key = key.Encode()
 	encoder := json.NewEncoder(response)
 	encoder.Encode(senderType)
 }
 
 func (s *SenderTypeController) Update(response http.ResponseWriter, request *http.Request) {
-	context := appengine.NewContext(request)
 	encodedKey := mux.Vars(request)["key"]
-	key, err := datastore.DecodeKey(encodedKey)
+	senderType, err := app.SenderTypeOrm.Find(request, encodedKey)
 	if err != nil {
-		context.Infof("Key decoding failed for key %s", encodedKey)
-		http.NotFound(response, request)
-		return
-	}
-	senderType := new(SenderType)
-	decoder := json.NewDecoder(request.Body)
-	err = decoder.Decode(&senderType)
-	if err != nil {
-		context.Infof("Decoding failed for request %v", request)
-		http.Error(response, err.Error(), http.StatusBadRequest)
-		return
-	}
-	key, err = datastore.Put(context, key, senderType)
-	if err != nil {
-		context.Infof("Update failed for key '%v' and entity '%+v'", key, senderType)
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	senderType.Key = key.Encode()
+	decoder := json.NewDecoder(request.Body)
+	err = decoder.Decode(&senderType)
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusBadRequest)
+		return
+	}
+	senderType, err = app.SenderTypeOrm.Save(request, senderType)
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	encoder := json.NewEncoder(response)
 	encoder.Encode(senderType)
 }
 
 func (s *SenderTypeController) Delete(response http.ResponseWriter, request *http.Request) {
-	context := appengine.NewContext(request)
 	encodedKey := mux.Vars(request)["key"]
-	key, err := datastore.DecodeKey(encodedKey)
-	if err != nil {
-		context.Infof("Key decoding failed for key %s", encodedKey)
-		http.NotFound(response, request)
-		return
-	}
-	err = datastore.Delete(context, key)
+	senderType, err := app.SenderTypeOrm.Delete(request, encodedKey)
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	encoder := json.NewEncoder(response)
+	encoder.Encode(senderType)
 }
 
-type SenderConfig struct {
+type SenderClient struct {
 	Key           string `json:"key", datastore:"-"`
 	ClientId      string `json:"client_id"`
 	ClientSecret  string `json:"client_secret"`
@@ -134,37 +108,53 @@ type SenderConfig struct {
 	SenderTypeKey string `json:"sender_type_key"`
 }
 
-type SenderConfigsController struct{}
+type SenderClientController struct{}
 
-func (s *SenderConfigsController) Index(response http.ResponseWriter, request *http.Request) {
-	context := appengine.NewContext(request)
+func (s *SenderClientController) Index(response http.ResponseWriter, request *http.Request) {
 	senderTypeKey, keyPresent := mux.Vars(request)["type_key"]
-	query := datastore.NewQuery("SenderConfig")
+	var senderClients []*SenderClient
+	var err error
 	if keyPresent {
-		query.Filter("SenderTypeKey =", senderTypeKey)
+		senderClients, err = app.SenderClientOrm.FindAllForSenderType(request, senderTypeKey)
+	} else {
+		senderClients, err = app.SenderClientOrm.FindAll(request)
 	}
-	var senderConfigs []*SenderConfig
-	keys, err := query.GetAll(context, &senderConfigs)
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if senderConfigs == nil {
-		senderConfigs = make([]*SenderConfig, 0)
-	}
-	for i, senderConfig := range senderConfigs {
-		encodedKey := keys[i].Encode()
-		senderConfig.Key = encodedKey
-		senderConfig.SenderTypeKey = senderTypeKey
-	}
 	encoder := json.NewEncoder(response)
-	encoder.Encode(senderConfigs)
+	encoder.Encode(senderClients)
 }
 
-func (s *SenderConfigsController) Create(response http.ResponseWriter, request *http.Request) {}
+func (s *SenderClientController) Create(response http.ResponseWriter, request *http.Request) {
+	context := appengine.NewContext(request)
+	senderClient := new(SenderClient)
+	decoder := json.NewDecoder(request.Body)
+	err := decoder.Decode(&senderClient)
+	if err != nil {
+		context.Infof("Decoding failed for request %v", request)
+		http.Error(response, err.Error(), http.StatusBadRequest)
+		return
+	}
+	senderTypeKey, keyPresent := mux.Vars(request)["type_key"]
+	if keyPresent {
+		senderClient.SenderTypeKey = senderTypeKey
+	}
+	incompleteKey := datastore.NewIncompleteKey(context, "SenderClient", nil)
+	key, err := datastore.Put(context, incompleteKey, senderClient)
+	if err != nil {
+		context.Infof("Insert failed for key '%v' and entity '%+v'", incompleteKey, senderClient)
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	senderClient.Key = key.Encode()
+	encoder := json.NewEncoder(response)
+	encoder.Encode(senderClient)
+}
 
-func (s *SenderConfigsController) Show(response http.ResponseWriter, request *http.Request) {}
+func (s *SenderClientController) Show(response http.ResponseWriter, request *http.Request) {}
 
-func (s *SenderConfigsController) Update(response http.ResponseWriter, request *http.Request) {}
+func (s *SenderClientController) Update(response http.ResponseWriter, request *http.Request) {}
 
-func (s *SenderConfigsController) Delete(response http.ResponseWriter, request *http.Request) {}
+func (s *SenderClientController) Delete(response http.ResponseWriter, request *http.Request) {}

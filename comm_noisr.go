@@ -7,8 +7,10 @@ import (
 )
 
 var router *mux.Router
+var app *App
 
 func init() {
+	app = &App{&SenderTypeOrm{}, &SenderClientOrm{}}
 	router = mux.NewRouter()
 	router.HandleFunc("/", func(response http.ResponseWriter, request *http.Request) {
 		fmt.Fprintf(response, "Hello world")
@@ -21,8 +23,8 @@ func init() {
 	router.HandleFunc("/sender_types/{key}", senderTypesController.Update).Methods("PUT")
 	router.HandleFunc("/sender_types/{key}", senderTypesController.Delete).Methods("DELETE")
 
-	senderConfigsController := &SenderConfigsController{}
-	router.HandleFunc("/sender_configs", senderConfigsController.Index).Methods("GET")
-	router.HandleFunc("/sender_types/{type_key}/sender_configs", senderConfigsController.Index).Methods("GET")
+	SenderClientController := &SenderClientController{}
+	router.HandleFunc("/sender_clients", SenderClientController.Index).Methods("GET")
+	router.HandleFunc("/sender_types/{type_key}/sender_clients", SenderClientController.Index).Methods("GET")
 	http.Handle("/", router)
 }
