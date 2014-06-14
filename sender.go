@@ -14,11 +14,15 @@ type SenderType struct {
 	Scope         string          `json:"scope"`
 	AuthURL       string          `json:"auth_url"`
 	TokenURL      string          `json:"token_url"`
-	RedirectURL   string          `json:"redirect_url"`
 	SenderClients []*SenderClient `json:"sender_clients,omitempty", datastore:"-"`
 }
 
 type SenderTypeController struct{}
+
+func (s *SenderTypeController) Options(response http.ResponseWriter, request *http.Request) {
+	encoder := json.NewEncoder(response)
+	encoder.Encode(SenderType{})
+}
 
 func (s *SenderTypeController) Index(response http.ResponseWriter, request *http.Request) {
 	senderTypes, err := app.SenderTypeOrm.FindAll(request)
@@ -109,6 +113,11 @@ type SenderClient struct {
 }
 
 type SenderClientController struct{}
+
+func (s *SenderClientController) Options(response http.ResponseWriter, request *http.Request) {
+	encoder := json.NewEncoder(response)
+	encoder.Encode(SenderClient{})
+}
 
 func (s *SenderClientController) Index(response http.ResponseWriter, request *http.Request) {
 	senderTypeKey, keyPresent := mux.Vars(request)["type_key"]

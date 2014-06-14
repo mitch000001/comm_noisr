@@ -17,6 +17,7 @@ func init() {
 	}).Methods("GET")
 
 	senderTypesController := &SenderTypeController{}
+	router.HandleFunc("/sender_types", senderTypesController.Options).Methods("OPTIONS")
 	router.HandleFunc("/sender_types", senderTypesController.Index).Methods("GET")
 	router.HandleFunc("/sender_types", senderTypesController.Create).Methods("POST")
 	router.HandleFunc("/sender_types/{key}", senderTypesController.Show).Methods("GET")
@@ -24,7 +25,10 @@ func init() {
 	router.HandleFunc("/sender_types/{key}", senderTypesController.Delete).Methods("DELETE")
 
 	SenderClientController := &SenderClientController{}
+	router.HandleFunc("/sender_clients", SenderClientController.Options).Methods("OPTIONS")
 	router.HandleFunc("/sender_clients", SenderClientController.Index).Methods("GET")
+	router.HandleFunc("/sender_clients", SenderClientController.Create).Methods("POST")
 	router.HandleFunc("/sender_types/{type_key}/sender_clients", SenderClientController.Index).Methods("GET")
+	router.HandleFunc("/sender_types/{type_key}/sender_clients", SenderClientController.Create).Methods("POST")
 	http.Handle("/", router)
 }
